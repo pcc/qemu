@@ -813,6 +813,9 @@ static void aarch64_host_initfn(Object *obj)
 #endif
 }
 
+static Property arm_cpu_mte_base_property =
+    DEFINE_PROP_UINT64("mte-base", ARMCPU, env.prop_mte_base, 0);
+
 /* -cpu max: if KVM is enabled, like -cpu host (best possible with this host);
  * otherwise, a CPU with as many features enabled as our emulation supports.
  * The version of '-cpu max' for qemu-system-arm is defined in cpu.c;
@@ -982,6 +985,7 @@ static void aarch64_max_initfn(Object *obj)
     object_property_add(obj, "sve-max-vq", "uint32", cpu_max_get_sve_max_vq,
                         cpu_max_set_sve_max_vq, NULL, NULL);
     qdev_property_add_static(DEVICE(obj), &arm_cpu_lpa2_property);
+    qdev_property_add_static(DEVICE(obj), &arm_cpu_mte_base_property);
 }
 
 static void aarch64_a64fx_initfn(Object *obj)

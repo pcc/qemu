@@ -2104,6 +2104,17 @@ static void machvirt_init(MachineState *machine)
         exit(1);
     }
 
+    if (vms->mte_shared_alloc) {
+        MemoryRegion *tagram = g_new(MemoryRegion, 1);
+
+        vms->mte_base = vms->highest_gpa + 1;
+        vms->mte_size = machine->ram_size / 32;
+        vms->highest_gpa += vms->mte_size;
+        memory_region_init_ram(tagram, NULL, "mach-virt.tag", vms->mte_size,
+                               &error_fatal);
+        memory_region_add_subregion(sysmem, vms->mte_base, tagram);
+    }
+
     create_fdt(vms);
 
     assert(possible_cpus->len == max_cpus);
@@ -2153,6 +2164,10 @@ static void machvirt_init(MachineState *machine)
             object_property_set_bool(cpuobj, "lpa2", false, NULL);
         }
 
+        if (vms->mte_shared_alloc && object_property_find(cpuobj, "mte-base")) {
+            object_property_set_uint(cpuobj, "mte-base", vms->mte_base, NULL);
+        }
+
         if (object_property_find(cpuobj, "reset-cbar")) {
             object_property_set_int(cpuobj, "reset-cbar",
                                     vms->memmap[VIRT_CPUPERIPHS].base,
@@ -2166,7 +2181,7 @@ static void machvirt_init(MachineState *machine)
                                      OBJECT(secure_sysmem), &error_abort);
         }
 
-        if (vms->mte) {
+        if (vms->mte && !vms->mte_shared_alloc) {
             /* Create the memory region only once, but link to all cpus. */
             if (!tag_sysmem) {
                 /*
@@ -2282,6 +2297,7 @@ static void machvirt_init(MachineState *machine)
     vms->bootinfo.ram_size = machine->ram_size;
     vms->bootinfo.board_id = -1;
     vms->bootinfo.loader_start = vms->memmap[VIRT_MEM].base;
+    vms->bootinfo.mte_alloc_start = vms->mte_base;
     vms->bootinfo.get_dtb = machvirt_dtb;
     vms->bootinfo.skip_dtb_autoload = true;
     vms->bootinfo.firmware_loaded = firmware_loaded;
@@ -2456,6 +2472,20 @@ static void virt_set_mte(Object *obj, bool value, Error **errp)
     VirtMachineState *vms = VIRT_MACHINE(obj);
 
     vms->mte = value;
+}
+
+static bool virt_get_mte_shared_alloc(Object *obj, Error **errp)
+{
+    VirtMachineState *vms = VIRT_MACHINE(obj);
+
+    return vms->mte_shared_alloc;
+}
+
+static void virt_set_mte_shared_alloc(Object *obj, bool value, Error **errp)
+{
+    VirtMachineState *vms = VIRT_MACHINE(obj);
+
+    vms->mte_shared_alloc = value;
 }
 
 static char *virt_get_gic_version(Object *obj, Error **errp)
@@ -2982,6 +3012,14 @@ static void virt_machine_class_init(ObjectClass *oc, void *data)
                                           "guest CPU which implements the ARM "
                                           "Memory Tagging Extension");
 
+    object_class_property_add_bool(oc, "mte-shared-alloc",
+                                   virt_get_mte_shared_alloc,
+                                   virt_set_mte_shared_alloc);
+    object_class_property_set_description(
+        oc, "mte-shared-alloc",
+        "Set on/off to enable/disable exposing allocation tag storage to the "
+        "guest");
+
     object_class_property_add_bool(oc, "its", virt_get_its,
                                    virt_set_its);
     object_class_property_set_description(oc, "its",
@@ -3060,6 +3098,8 @@ static void virt_instance_init(Object *obj)
 
     /* MTE is disabled by default.  */
     vms->mte = false;
+    vms->mte_shared_alloc = false;
+    vms->mte_base = vms->mte_size = 0;
 
     /* Supply a kaslr-seed by default */
     vms->dtb_kaslr_seed = true;

@@ -19,6 +19,7 @@
 
 #include "qemu/osdep.h"
 #include "qemu/log.h"
+#include "qemu/units.h"
 #include "cpu.h"
 #include "internals.h"
 #include "exec/exec-all.h"
@@ -198,11 +199,21 @@ static uint8_t *allocation_tag_mem(CPUARMState *env, int ptr_mmu_idx,
         mr = mr->container;
     } while (mr);
 
-    /* Convert to the physical address in tag space.  */
-    tag_paddr = ptr_paddr >> (LOG2_TAG_GRANULE + 1);
+    /*
+     * Convert to the physical address, either in tag space or the regular
+     * address space.
+     */
+    if (env->prop_mte_base) {
+        /* FIXME: Assumes that RAM starts at 1 GiB. */
+        tag_paddr = env->prop_mte_base +
+                    ((ptr_paddr - GiB) >> (LOG2_TAG_GRANULE + 1));
+        tag_asi = iotlbentry->attrs.secure ? ARMASIdx_S : ARMASIdx_NS;
+    } else {
+        tag_paddr = ptr_paddr >> (LOG2_TAG_GRANULE + 1);
+        tag_asi = iotlbentry->attrs.secure ? ARMASIdx_TagS : ARMASIdx_TagNS;
+    }
 
-    /* Look up the address in tag space. */
-    tag_asi = iotlbentry->attrs.secure ? ARMASIdx_TagS : ARMASIdx_TagNS;
+    /* Look up the address. */
     tag_as = cpu_get_address_space(env_cpu(env), tag_asi);
     mr = address_space_translate(tag_as, tag_paddr, &xlat, NULL,
                                  tag_access == MMU_DATA_STORE,

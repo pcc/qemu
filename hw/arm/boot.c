@@ -444,7 +444,12 @@ static int fdt_add_memory_node(void *fdt, uint32_t acells, hwaddr mem_base,
     if (numa_node_id >= 0) {
         ret = qemu_fdt_setprop_cell(fdt, nodename,
                                     "numa-node-id", numa_node_id);
+        if (ret < 0) {
+            goto out;
+        }
     }
+
+    ret = qemu_fdt_setprop(fdt, nodename, "arm,mte-alloc", "", 0);
 out:
     g_free(nodename);
     return ret;
@@ -639,6 +644,16 @@ int arm_load_dtb(hwaddr addr, const struct arm_boot_info *binfo,
                     binfo->loader_start);
             goto fail;
         }
+
+        if (binfo->mte_alloc_start) {
+            rc = fdt_add_memory_node(fdt, acells, binfo->mte_alloc_start,
+                                     scells, binfo->ram_size / 32, -1);
+            if (rc < 0) {
+                fprintf(stderr, "couldn't add /memory@%" PRIx64 " node\n",
+                        binfo->mte_alloc_start);
+                goto fail;
+            }
+        }
     }
 
     rc = fdt_path_offset(fdt, "/chosen");
@@ -669,6 +684,24 @@ int arm_load_dtb(hwaddr addr, const struct arm_boot_info *binfo,
             fprintf(stderr, "couldn't set /chosen/linux,initrd-end\n");
             goto fail;
         }
+    }
+
+    if (binfo->mte_alloc_start) {
+        rc = fdt_path_offset(fdt, "/reserved-memory");
+        if (rc < 0) {
+            qemu_fdt_add_subnode(fdt, "/reserved-memory");
+        }
+        qemu_fdt_setprop_cell(fdt, "/reserved-memory", "#address-cells",
+                              acells);
+        qemu_fdt_setprop_cell(fdt, "/reserved-memory", "#size-cells", scells);
+        qemu_fdt_setprop(fdt, "/reserved-memory", "ranges", "", 0);
+
+        qemu_fdt_add_subnode(fdt, "/reserved-memory/mte");
+        qemu_fdt_setprop_string(fdt, "/reserved-memory/mte", "compatible",
+                                "arm,mte-tag-storage");
+        qemu_fdt_setprop_sized_cells(fdt, "/reserved-memory/mte", "reg", acells,
+                                     binfo->mte_alloc_start, scells,
+                                     binfo->ram_size / 32);
     }
 
     fdt_add_psci_node(fdt);

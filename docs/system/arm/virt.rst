@@ -88,6 +88,10 @@ mte
   Set ``on``/``off`` to enable/disable emulating a guest CPU which implements the
   Arm Memory Tagging Extensions. The default is ``off``.
 
+mte-shared-alloc
+  Set ``on``/``off`` to enable/disable exposing allocation tag storage to the
+  guest. The default is ``off``.
+
 highmem
   Set ``on``/``off`` to enable/disable placing devices and RAM in physical
   address space above 32 bits. The default is ``on`` for machine types

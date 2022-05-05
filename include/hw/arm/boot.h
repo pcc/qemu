@@ -41,6 +41,7 @@ struct arm_boot_info {
     const char *initrd_filename;
     const char *dtb_filename;
     hwaddr loader_start;
+    hwaddr mte_alloc_start;
     hwaddr dtb_start;
     hwaddr dtb_limit;
     /* If set to True, arm_load_kernel() will not load DTB.

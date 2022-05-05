@@ -747,6 +747,8 @@ typedef struct CPUArchState {
     /* Linux syscall tagged address support */
     bool tagged_addr_enable;
 #endif
+
+    uint64_t prop_mte_base;
 } CPUARMState;
 
 static inline void set_feature(CPUARMState *env, int feature)
