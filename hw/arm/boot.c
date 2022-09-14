@@ -426,7 +426,7 @@ static void set_kernel_args_old(const struct arm_boot_info *info,
 
 static int fdt_add_memory_node(void *fdt, uint32_t acells, hwaddr mem_base,
                                uint32_t scells, hwaddr mem_len,
-                               int numa_node_id)
+                               int numa_node_id, bool mte)
 {
     char *nodename;
     int ret;
@@ -450,6 +450,8 @@ static int fdt_add_memory_node(void *fdt, uint32_t acells, hwaddr mem_base,
     }
 
     ret = qemu_fdt_setprop(fdt, nodename, "arm,mte-alloc", "", 0);
+    if (!mte)
+        ret = qemu_fdt_setprop(fdt, nodename, "arm,no-mte", "", 0);
 out:
     g_free(nodename);
     return ret;
@@ -627,7 +629,7 @@ int arm_load_dtb(hwaddr addr, const struct arm_boot_info *binfo,
             }
 
             rc = fdt_add_memory_node(fdt, acells, mem_base,
-                                     scells, mem_len, i);
+                                     scells, mem_len, i, true);
             if (rc < 0) {
                 fprintf(stderr, "couldn't add /memory@%"PRIx64" node\n",
                         mem_base);
@@ -638,7 +640,7 @@ int arm_load_dtb(hwaddr addr, const struct arm_boot_info *binfo,
         }
     } else {
         rc = fdt_add_memory_node(fdt, acells, binfo->loader_start,
-                                 scells, binfo->ram_size, -1);
+                                 scells, binfo->ram_size, -1, true);
         if (rc < 0) {
             fprintf(stderr, "couldn't add /memory@%"PRIx64" node\n",
                     binfo->loader_start);
@@ -647,7 +649,7 @@ int arm_load_dtb(hwaddr addr, const struct arm_boot_info *binfo,
 
         if (binfo->mte_alloc_start) {
             rc = fdt_add_memory_node(fdt, acells, binfo->mte_alloc_start,
-                                     scells, binfo->ram_size / 32, -1);
+                                     scells, binfo->ram_size / 32, -1, false);
             if (rc < 0) {
                 fprintf(stderr, "couldn't add /memory@%" PRIx64 " node\n",
                         binfo->mte_alloc_start);
@@ -702,6 +704,9 @@ int arm_load_dtb(hwaddr addr, const struct arm_boot_info *binfo,
         qemu_fdt_setprop_sized_cells(fdt, "/reserved-memory/mte", "reg", acells,
                                      binfo->mte_alloc_start, scells,
                                      binfo->ram_size / 32);
+        /* FIXME: Assumes that RAM starts at 1 GiB. */
+        qemu_fdt_setprop_sized_cells(fdt, "/reserved-memory/mte",
+                                     "storage-base", acells, GiB);
     }
 
     fdt_add_psci_node(fdt);
